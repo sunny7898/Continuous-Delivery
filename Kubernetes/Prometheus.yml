@@ -1,0 +1,82 @@
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+    name: prom-pvc
+    labels:
+        name: prom-pvc
+spec:
+    accessModes:
+        -   ReadWriteOnce
+    resources:
+        requests:
+            storage: 1Gi 
+---
+apiVersion: v1
+kind: Service
+metadata:
+    name: prom-service
+spec:
+    selector:
+        env: master
+    type: NodePort
+    ports:
+        -   nodePort: 30090
+            port: 9099
+            targetPort: 9090
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: prom-script
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval:     15s # Set the scrape interval to every 15 seconds. Default is every 1 minute.
+      evaluation_interval: 15s # Evaluate rules every 15 seconds. The default is every 1 minute..
+      
+    scrape_configs:
+      - job_name: 'prometheus'
+        static_configs:
+        - targets: ['localhost:9090']
+      - job_name: 'node1'
+        static_configs:
+        - targets: ['192.168.99.106:9100']
+          labels:
+             env: 'master'
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prom
+spec:
+    replicas: 1
+    selector: 
+        matchLabels:
+            env: master
+      
+    template:
+        metadata: 
+            name: prom
+            labels:
+                env: master
+        spec: 
+            containers: 
+            -   name: prom-con
+                image: sunny078/prom-config:v1
+                volumeMounts:
+                    -   name: prometheus
+                        mountPath: /etc/prometheus/data
+                    -   name: prometheus-script
+                        mountPath: /etc/prometheus/prometheus.yml
+                        subPath: prometheus.yml  
+            volumes:
+                -   name: prometheus
+                    persistentVolumeClaim:
+                        claimName: prom-pvc
+                -   name: prometheus-script
+                    configMap:
+                        name: prom-script
+                        defaultMode: 0744
+                
+
